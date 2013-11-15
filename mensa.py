@@ -47,6 +47,9 @@ class MensaHandler:
         self.post_data = urlparse.parse_qs(self.environ['wsgi.input'].read(request_body_size))
 
     def print_home(self):
+        statement_value = self.user.get_statement(self.phase).value
+        if statement_value is None:
+            statement_value = ''
         self.output.append(u'<h1>A che ora andiamo a mensa?</h1>\n')
         self.output.append(u'Ciao utente <b>@%s</b>!<br>\n' % (self.user.get_pretty_name()))
         self.output.append(u'Queste sono le dichiarazioni per il %s a %s.<br>\n' % (self.phase.date, MOMENTS[self.phase.moment][0]))
@@ -56,7 +59,7 @@ class MensaHandler:
         self.output.append(u'<br>\n')
         self.output.append(u'Fai la tua dichiarazione!<br>\n')
         self.output.append(u'<form method="post" action="%s/state">\n' % (self.script_name))
-        self.output.append(u'<input type="text" name="statement" value="%s" size="100">\n' % (html_escape(self.user.get_statement(self.phase).value)))
+        self.output.append(u'<input type="text" name="statement" value="%s" size="100">\n' % (html_escape(statement_value)))
         self.output.append(u'<input type="submit" name="submit" value="Sottometti!">\n')
         self.output.append(u'</form>\n')
         self.output.append(u'<i>Buone patate!</i><br>\n')
