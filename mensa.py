@@ -136,14 +136,16 @@ class MensaHandler:
             self.user_check()
             self.phase_check()
 
-            if self.path_info == '/json':
+            if self.path_info == '':
+                self.print_home()
+            elif self.path_info == '/json':
                 self.print_json_statements()
             elif self.path_info == '/debug':
                 self.print_debug()
             elif self.path_info == '/state':
                 self.receive_statement()
             else:
-                self.print_home()
+                self.redirect(self.script_name)
 
         except RequestTerminator:
             pass
