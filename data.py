@@ -66,7 +66,7 @@ class Phase(Base):
     moment = Column(Integer, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint('date', 'moment'),
+        UniqueConstraint('date', 'moment')
         )
 
     def get_statements(self):
