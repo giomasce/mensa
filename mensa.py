@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 import sys
 import os
@@ -5,10 +6,17 @@ import datetime
 import pprint
 import json
 import urlparse
+import traceback
 
 sys.path.append(os.path.dirname(__file__))
 from data import Session, User, Phase, Statement, MOMENTS
 from util import html_escape
+
+MAX_REQUEST_BODY_SIZE = 10*1024
+
+# Just a way to quickly terminate the request
+class RequestTerminator:
+    pass
 
 class MensaHandler:
     def __init__(self, environ, start_response):
@@ -30,20 +38,20 @@ class MensaHandler:
             self.user = User.get_from_username(self.session, username)
             if not self.user.enabled:
                 self.user = None
+        if self.user is None:
+            self.error(message="Could not detect user")
 
     def phase_check(self):
         self.phase = Phase.get_current(self.session, self.ref_time)
 
     def url_check(self):
-        # TODO - Is this the right way?
-        script_name = self.environ['SCRIPT_NAME']
-        script_url = self.environ['SCRIPT_URL']
-        assert(script_url.startswith(script_name))
-        self.url_breakdown = script_url[len(script_name)+1:].split('/')
-        self.script_name = script_name
+        self.path_info = self.environ['PATH_INFO']
+        self.script_name = self.environ['SCRIPT_NAME']
 
     def post_check(self):
         request_body_size = int(self.environ.get('CONTENT_LENGTH', 0))
+        if request_body_size > MAX_REQUEST_BODY_SIZE:
+            self.error(status='413 Request Entity Too Large')
         self.post_data = urlparse.parse_qs(self.environ['wsgi.input'].read(request_body_size))
 
     def print_home(self):
@@ -55,7 +63,7 @@ class MensaHandler:
         self.output.append(u'Queste sono le dichiarazioni per il %s a %s.<br>\n' % (self.phase.date, MOMENTS[self.phase.moment][0]))
         self.output.append(u'<br>\n')
         for statement in self.phase.get_statements():
-            self.output.append(u'<b>@%s</b>: %s<br>\n' % (statement.user.get_pretty_name(), statement.value))
+            self.output.append(u'<b>@%s</b>: %s<br>\n' % (html_escape(statement.user.get_pretty_name()), html_escape(statement.value)))
         self.output.append(u'<br>\n')
         self.output.append(u'Fai la tua dichiarazione!<br>\n')
         self.output.append(u'<form method="post" action="%s/state">\n' % (self.script_name))
@@ -68,7 +76,8 @@ class MensaHandler:
     def print_debug(self):
         self.content_type = 'text/plain'
         pp = pprint.PrettyPrinter(indent=4)
-        self.output.append('URL breakdown: %r\n' % (self.url_breakdown))
+        if 'path_info' in self.__dict__:
+            self.output.append('Path info: %s\n' % (self.path_info))
         self.output.append(pp.pformat(self.environ))
 
     def receive_statement(self):
@@ -90,14 +99,20 @@ class MensaHandler:
                                       'value': statement.value})
         self.output.append(json.dumps(ret))
 
-    # TODO
-    def error(self):
-        pass
+    def error(self, status=None, message=None):
+        self.status = status
+        if self.status is None:
+            self.status = '500 Internal Server Error'
+        self.output = ['<h1>Error: %s</h1>' % (self.status)]
+        if message is not None:
+            self.output.append('%s' % (message))
+        raise RequestTerminator()
 
     def redirect(self, where):
         self.status = '302 Found'
         self.response_headers += (('Location', where),)
         self.output = []
+        raise RequestTerminator()
 
     def finish(self):
         self.session.commit()
@@ -106,19 +121,41 @@ class MensaHandler:
                                   ('Content-Length', str(sum(map(lambda x: len(x), self.output))))]
         self.start_response(self.status, self.response_headers)
 
-    def __call__(self):
-        self.url_check()
-        self.user_check()
-        self.phase_check()
+    EMERGENCY_DEBUG = False
+    PRINT_ERROR = True
 
-        if self.url_breakdown == ['json']:
-            self.print_json_statements()
-        elif self.url_breakdown == ['debug']:
-            self.print_debug()
-        elif self.url_breakdown == ['state']:
-            self.receive_statement()
-        else:
-            self.print_home()
+    def __call__(self):
+        try:
+            self.url_check()
+
+            if MensaHandler.EMERGENCY_DEBUG:
+                self.print_debug()
+                self.finish()
+                return [self.output]
+
+            self.user_check()
+            self.phase_check()
+
+            if self.path_info == '/json':
+                self.print_json_statements()
+            elif self.path_info == '/debug':
+                self.print_debug()
+            elif self.path_info == '/state':
+                self.receive_statement()
+            else:
+                self.print_home()
+
+        except RequestTerminator:
+            pass
+
+        except:
+            try:
+                message = None
+                if MensaHandler.PRINT_ERROR:
+                    message = u'<pre>%s</pre>' % (html_escape(traceback.format_exc()))
+                self.error(message=message)
+            except RequestTerminator:
+                pass
 
         self.finish()
         return [self.output]

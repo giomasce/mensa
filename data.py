@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 import sys
 import os
@@ -14,6 +15,9 @@ with open(os.path.join(os.path.dirname(__file__), 'dbauth')) as fdbauth:
     db = create_engine(fdbauth.read().strip(), echo=False)
 Session = sessionmaker(db)
 Base = declarative_base(db)
+
+create_all = Base.metadata.create_all
+drop_all = Base.metadata.drop_all
 
 MOMENTS = [('colazione', datetime.time(0)),
            ('pranzo', datetime.time(11)),
@@ -61,9 +65,9 @@ class Phase(Base):
     date = Column(Date, nullable=False)
     moment = Column(Integer, nullable=False)
 
-    __table_args__ = [
+    __table_args__ = (
         UniqueConstraint('date', 'moment'),
-        ]
+        )
 
     def get_statements(self):
         return object_session(self).query(Statement).filter(Statement.phase == self).all()

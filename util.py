@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 html_escape_table = {
     "&": "&amp;",
