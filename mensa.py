@@ -49,15 +49,19 @@ class MensaHandler:
         self.script_name = self.environ['SCRIPT_NAME']
 
     def post_check(self):
+        if self.environ['REQUEST_METHOD'] != 'POST':
+            self.error(status='405 Method Not Allowed')
         request_body_size = int(self.environ.get('CONTENT_LENGTH', 0))
         if request_body_size > MAX_REQUEST_BODY_SIZE:
             self.error(status='413 Request Entity Too Large')
         self.post_data = urlparse.parse_qs(self.environ['wsgi.input'].read(request_body_size))
 
     def print_home(self):
-        statement_value = self.user.get_statement(self.phase).value
-        if statement_value is None:
+        statement = self.user.get_last_statement(self.phase)
+        if statement is None or statement.value is None:
             statement_value = ''
+        else:
+            statement_value = statement.value
         self.output.append(u'<h1>A che ora andiamo a mensa?</h1>\n')
         self.output.append(u'Ciao utente <b>@%s</b>!<br>\n' % (self.user.get_pretty_name()))
         self.output.append(u'Queste sono le dichiarazioni per il %s a %s.<br>\n' % (self.phase.date, MOMENTS[self.phase.moment][0]))
@@ -82,13 +86,11 @@ class MensaHandler:
 
     def receive_statement(self):
         self.post_check()
-        statement = self.user.get_statement(self.phase)
-        new_value = self.post_data.get('statement', [])
-        if len(new_value) == 0:
-            self.session.delete(statement)
-        else:
-            statement.value = new_value[0].decode('utf-8')
-            self.session.add(statement)
+        try:
+            value = self.post_data.get('statement', [])[0].decode('utf-8')
+        except IndexError:
+            value = None
+        self.user.add_statement(self.phase, self.ref_time, value)
         self.redirect(self.script_name)
 
     def print_json_statements(self):

@@ -4,12 +4,13 @@ import sys
 import os
 import datetime
 
-from sqlalchemy import create_engine, Column, Integer, String, Unicode, Boolean, ForeignKey, Date, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Unicode, Boolean, DateTime, ForeignKey, Date, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, backref
+from sqlalchemy.orm import sessionmaker, relationship, backref, aliased
 from sqlalchemy.schema import Index
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import object_session
+from sqlalchemy.sql.expression import desc, func, and_, alias
 
 with open(os.path.join(os.path.dirname(__file__), 'dbauth')) as fdbauth:
     db = create_engine(fdbauth.read().strip(), echo=False)
@@ -30,18 +31,23 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
 
-    def get_statement(self, phase):
-        try:
-            statement = object_session(self).query(Statement). \
-                filter(Statement.phase == phase). \
-                filter(Statement.user == self).one()
-        except NoResultFound:
-            statement = Statement()
-            statement.user = self
-            statement.phase = phase
-            statement.value = None
+    def add_statement(self, phase, time, value):
+        statement = Statement()
+        statement.user = self
+        statement.phase = phase
+        statement.time = time
+        statement.value = value
+        object_session(self).add(statement)
 
-        return statement
+    def get_last_statement(self, phase):
+        try:
+            return object_session(self).query(Statement). \
+                filter(Statement.phase == phase). \
+                filter(Statement.user == self). \
+                order_by(desc(Statement.time)). \
+                limit(1).one()
+        except NoResultFound:
+            return None
 
     def get_pretty_name(self):
         return self.username.replace('@UZ.SNS.IT', '')
@@ -60,17 +66,31 @@ class User(Base):
 
 class Phase(Base):
     __tablename__ = 'phases'
+    __table_args__ = (
+        UniqueConstraint('date', 'moment'),
+        )
 
     id = Column(Integer, primary_key=True)
     date = Column(Date, nullable=False)
     moment = Column(Integer, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint('date', 'moment')
-        )
-
     def get_statements(self):
-        return object_session(self).query(Statement).filter(Statement.phase == self).all()
+        # FIXME - Fix the following code and use it instead of the bad hack
+        #inner_max_time = func.max(Statement.time).alias()
+        #inner_statement = aliased(Statement)
+        #max_query = object_session(self).query(inner_statement, inner_max_time).group_by(inner_statement.user).subquery()
+        #outer_statement = aliased(Statement)
+        #print >> sys.stderr, max_query.c
+        #return object_session(self).query(outer_statement).join((max_query, max_query.c.inner_max_time == outer_statement.time))
+
+        statements = object_session(self).query(Statement).filter(Statement.phase == self).all()
+        users = {}
+        for statement in statements:
+            if statement.user.username not in users:
+                users[statement.user.username] = (datetime.datetime.fromtimestamp(0), None)
+            if statement.time >= users[statement.user.username][0]:
+                users[statement.user.username] = (statement.time, statement)
+        return filter(lambda x: x.value is not None, map(lambda (x, y): y, users.itervalues()))
 
     @classmethod
     def get_current(cls, session, when=None):
@@ -93,11 +113,15 @@ class Phase(Base):
 
 class Statement(Base):
     __tablename__ = 'statements'
+    __table_args__ = (
+        UniqueConstraint('user_id', 'phase_id', 'time'),
+        )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey(User.id, onupdate="CASCADE", ondelete="CASCADE"), nullable=False)
     phase_id = Column(Integer, ForeignKey(Phase.id, onupdate="CASCADE", ondelete="CASCADE"), nullable=False)
-    value = Column(Unicode, nullable=False)
+    time = Column(DateTime, nullable=False)
+    value = Column(Unicode, nullable=True)
 
     user = relationship(User)
     phase = relationship(Phase)
