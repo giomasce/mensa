@@ -64,6 +64,9 @@ class MensaHandler:
             statement_value = ''
         else:
             statement_value = statement.value
+
+        self.response_headers.append(('Refresh', '60'))
+
         self.output.append(u'<h1>A che ora andiamo a mensa?</h1>\n')
         self.output.append(u'Ciao utente <b>@%s</b>!<br>\n' % (self.user.get_pretty_name()))
         self.output.append(u'Queste sono le dichiarazioni per il %s a %s.<br>\n' % (self.phase.date, MOMENTS[self.phase.moment][0]))
@@ -76,7 +79,7 @@ class MensaHandler:
         self.output.append(u'<input type="text" name="statement" value="%s" size="100">\n' % (html_escape(statement_value)))
         self.output.append(u'<input type="submit" name="submit" value="Sottometti!">\n')
         self.output.append(u'</form>\n')
-        self.output.append(u'<i>Buone patate!</i><br>\n')
+        self.output.append(u'<i>Queste patate sono state cucinate alle %s. Che buone!</i><br>\n' % (str(self.ref_time)))
         self.output.append(u'<a href="%s/json">JSON</a><br>\n' % (self.script_name))
 
     def print_debug(self):
