@@ -90,7 +90,7 @@ class Phase(Base):
                 users[statement.user.username] = (datetime.datetime.fromtimestamp(0), None)
             if statement.time >= users[statement.user.username][0]:
                 users[statement.user.username] = (statement.time, statement)
-        return filter(lambda x: x.value is not None, map(lambda (x, y): y, users.itervalues()))
+        return sorted(filter(lambda x: x.value is not None, map(lambda (x, y): y, users.itervalues())), key=lambda x: x.time)
 
     @classmethod
     def get_current(cls, session, when=None):

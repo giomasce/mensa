@@ -67,7 +67,7 @@ class MensaHandler:
         self.output.append(u'Queste sono le dichiarazioni per il %s a %s.<br>\n' % (self.phase.date, MOMENTS[self.phase.moment][0]))
         self.output.append(u'<br>\n')
         for statement in self.phase.get_statements():
-            self.output.append(u'<b>@%s</b>: %s<br>\n' % (html_escape(statement.user.get_pretty_name()), html_escape(statement.value)))
+            self.output.append(u'<b>@%s</b> (%s): %s<br>\n' % (html_escape(statement.user.get_pretty_name()), html_escape(str(statement.time.time())), html_escape(statement.value)))
         self.output.append(u'<br>\n')
         self.output.append(u'Fai la tua dichiarazione!<br>\n')
         self.output.append(u'<form method="post" action="%s/state">\n' % (self.script_name))
