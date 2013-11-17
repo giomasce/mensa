@@ -7,12 +7,14 @@ import pprint
 import json
 import urlparse
 import traceback
+import time
 
 sys.path.append(os.path.dirname(__file__))
 from data import Session, User, Phase, Statement, MOMENTS
 from util import html_escape
 
 MAX_REQUEST_BODY_SIZE = 10*1024
+MAX_STATEMENTS = 100
 
 # Just a way to quickly terminate the request
 class RequestTerminator:
@@ -86,23 +88,28 @@ class MensaHandler:
 
     def receive_statement(self):
         self.post_check()
-        try:
-            value = self.post_data.get('statement', [])[0].decode('utf-8')
-        except IndexError:
-            value = None
-        self.user.add_statement(self.phase, self.ref_time, value)
-        self.redirect(self.script_name)
+        if self.user.get_statements_num(self.phase) >= MAX_STATEMENTS:
+            self.output.append("Could not add new statement: maximum reached")
+        else:
+            try:
+                value = self.post_data.get('statement', [])[0].decode('utf-8')
+            except IndexError:
+                value = None
+            self.user.add_statement(self.phase, self.ref_time, value)
+            self.redirect(self.script_name)
 
     def print_json_statements(self):
         self.content_type = 'application/json'
         ret = {'statements': []}
         for statement in self.phase.get_statements():
             ret['statements'].append({'username': statement.user.get_pretty_name(),
-                                      'value': statement.value})
+                                      'value': statement.value,
+                                      'timestamp': int(time.mktime(statement.time.timetuple()))})
         self.output.append(json.dumps(ret))
 
     def error(self, status=None, message=None):
         self.status = status
+        self.content_type = 'text/html'
         if self.status is None:
             self.status = '500 Internal Server Error'
         self.output = ['<h1>Error: %s</h1>' % (self.status)]
@@ -112,7 +119,7 @@ class MensaHandler:
 
     def redirect(self, where):
         self.status = '302 Found'
-        self.response_headers += (('Location', where),)
+        self.response_headers += [('Location', where)]
         self.output = []
         raise RequestTerminator()
 

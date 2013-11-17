@@ -49,6 +49,11 @@ class User(Base):
         except NoResultFound:
             return None
 
+    def get_statements_num(self, phase):
+        return object_session(self).query(Statement). \
+            filter(Statement.phase == phase). \
+            filter(Statement.user == self).count()
+
     def get_pretty_name(self):
         return self.username.replace('@UZ.SNS.IT', '')
 
