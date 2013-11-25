@@ -89,17 +89,20 @@ class MensaHandler:
             self.output.append('Path info: %s\n' % (self.path_info))
         self.output.append(pp.pformat(self.environ))
 
-    def receive_statement(self):
+    def receive_statement(self, for_api=False):
         self.post_check()
         if self.user.get_statements_num(self.phase) >= MAX_STATEMENTS:
             self.output.append("Could not add new statement: maximum reached")
         else:
             try:
                 value = self.post_data.get('statement', [])[0].decode('utf-8')
+            except UnicodeDecodeError:
+                self.error(status='400 Bad Request', message='Request is not validly encoded in UTF-8')
             except IndexError:
                 value = None
             self.user.add_statement(self.phase, self.ref_time, value)
-            self.redirect(self.script_name)
+            if not for_api:
+                self.redirect(self.script_name)
 
     def print_json_statements(self):
         self.content_type = 'application/json'
@@ -108,6 +111,12 @@ class MensaHandler:
             ret['statements'].append({'username': statement.user.get_pretty_name(),
                                       'value': statement.value,
                                       'timestamp': int(time.mktime(statement.time.timetuple()))})
+        self.output.append(json.dumps(ret))
+
+    def print_version(self):
+        self.content_type = 'application/json'
+        ret = {'min_version': 1,
+               'max_version': 1}
         self.output.append(json.dumps(ret))
 
     def error(self, status=None, message=None):
@@ -156,6 +165,14 @@ class MensaHandler:
                 self.print_debug()
             elif self.path_info == '/state':
                 self.receive_statement()
+
+            elif self.path_info == '/api/version.json':
+                self.print_version()
+            elif self.path_info == '/api/v1/statements.json':
+                self.print_json_statements()
+            elif self.path_info == '/api/v1/state':
+                self.receive_statement()
+
             else:
                 self.redirect(self.script_name)
 
